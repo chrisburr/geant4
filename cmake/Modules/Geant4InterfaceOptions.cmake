@@ -128,7 +128,6 @@ if(GEANT4_USE_QT)
   endif()
 
   find_package(OpenGL REQUIRED)
-  geant4_save_package_variables(OpenGL OPENGL_INCLUDE_DIR OPENGL_gl_LIBRARY OPENGL_glu_LIBRARY)
 
   # Variables for export
   execute_process(COMMAND ${QT_QMAKE_EXECUTABLE} -query QT_INSTALL_PREFIX OUTPUT_VARIABLE G4QTHOME OUTPUT_STRIP_TRAILING_WHITESPACE)
