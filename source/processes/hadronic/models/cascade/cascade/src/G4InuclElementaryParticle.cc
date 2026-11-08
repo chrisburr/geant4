@@ -193,60 +193,73 @@ const G4ParticleDefinition* G4InuclElementaryParticle::makeDefinition(G4int ityp
   return 0;
 }
 
+namespace
+{
+// Definition of the particle class T, retrieved only on first use: the
+// definitions are singletons, and calling the out-of-line Definition()
+// functions in every call of type() below is a hot spot of the cascade
+template<class T>
+inline const G4ParticleDefinition* Def()
+{
+  static const G4ParticleDefinition* const def = T::Definition();
+  return def;
+}
+}  // namespace
+
 // This is the inverse mapping to makeDefinition above
 
 G4int G4InuclElementaryParticle::type(const G4ParticleDefinition* pd)
 {
   if (pd == 0) return 0;
-  if (pd == G4Proton::Definition()) return proton;
-  if (pd == G4Neutron::Definition()) return neutron;
-  if (pd == G4PionPlus::Definition()) return pionPlus;
-  if (pd == G4PionMinus::Definition()) return pionMinus;
-  if (pd == G4PionZero::Definition()) return pionZero;
-  if (pd == G4Gamma::Definition()) return photon;
-  if (pd == G4KaonPlus::Definition()) return kaonPlus;
-  if (pd == G4KaonMinus::Definition()) return kaonMinus;
-  if (pd == G4KaonZero::Definition()) return kaonZero;
-  if (pd == G4AntiKaonZero::Definition()) return kaonZeroBar;
-  if (pd == G4Lambda::Definition()) return lambda;
-  if (pd == G4SigmaPlus::Definition()) return sigmaPlus;
-  if (pd == G4SigmaZero::Definition()) return sigmaZero;
-  if (pd == G4SigmaMinus::Definition()) return sigmaMinus;
-  if (pd == G4XiZero::Definition()) return xiZero;
-  if (pd == G4XiMinus::Definition()) return xiMinus;
-  if (pd == G4OmegaMinus::Definition()) return omegaMinus;
+  if (pd == Def<G4Proton>()) return proton;
+  if (pd == Def<G4Neutron>()) return neutron;
+  if (pd == Def<G4PionPlus>()) return pionPlus;
+  if (pd == Def<G4PionMinus>()) return pionMinus;
+  if (pd == Def<G4PionZero>()) return pionZero;
+  if (pd == Def<G4Gamma>()) return photon;
+  if (pd == Def<G4KaonPlus>()) return kaonPlus;
+  if (pd == Def<G4KaonMinus>()) return kaonMinus;
+  if (pd == Def<G4KaonZero>()) return kaonZero;
+  if (pd == Def<G4AntiKaonZero>()) return kaonZeroBar;
+  if (pd == Def<G4Lambda>()) return lambda;
+  if (pd == Def<G4SigmaPlus>()) return sigmaPlus;
+  if (pd == Def<G4SigmaZero>()) return sigmaZero;
+  if (pd == Def<G4SigmaMinus>()) return sigmaMinus;
+  if (pd == Def<G4XiZero>()) return xiZero;
+  if (pd == Def<G4XiMinus>()) return xiMinus;
+  if (pd == Def<G4OmegaMinus>()) return omegaMinus;
   // NOTE:  The four light nuclei "particles" are actually G4Ions
-  if (pd == G4Deuteron::Definition()) return deuteron;
-  if (pd == G4Triton::Definition()) return triton;
-  if (pd == G4He3::Definition()) return He3;
-  if (pd == G4Alpha::Definition()) return alpha;
-  if (pd == G4AntiProton::Definition()) return antiProton;
-  if (pd == G4AntiNeutron::Definition()) return antiNeutron;
+  if (pd == Def<G4Deuteron>()) return deuteron;
+  if (pd == Def<G4Triton>()) return triton;
+  if (pd == Def<G4He3>()) return He3;
+  if (pd == Def<G4Alpha>()) return alpha;
+  if (pd == Def<G4AntiProton>()) return antiProton;
+  if (pd == Def<G4AntiNeutron>()) return antiNeutron;
   // NOTE:  The the four light antinuclei "particles" are actually G4Ions
-  if (pd == G4AntiDeuteron::Definition()) return antiDeuteron;
-  if (pd == G4AntiTriton::Definition()) return antiTriton;
-  if (pd == G4AntiHe3::Definition()) return antiHe3;
-  if (pd == G4AntiAlpha::Definition()) return antiAlpha;
+  if (pd == Def<G4AntiDeuteron>()) return antiDeuteron;
+  if (pd == Def<G4AntiTriton>()) return antiTriton;
+  if (pd == Def<G4AntiHe3>()) return antiHe3;
+  if (pd == Def<G4AntiAlpha>()) return antiAlpha;
   // NOTE:  The three unbound dibaryons are local Bertini classes
-  if (pd == G4Diproton::Definition()) return diproton;
-  if (pd == G4UnboundPN::Definition()) return unboundPN;
-  if (pd == G4Dineutron::Definition()) return dineutron;
+  if (pd == Def<G4Diproton>()) return diproton;
+  if (pd == Def<G4UnboundPN>()) return unboundPN;
+  if (pd == Def<G4Dineutron>()) return dineutron;
 
-  if (pd == G4Electron::Definition()) return electron;
-  if (pd == G4Positron::Definition()) return positron;
-  if (pd == G4NeutrinoE::Definition()) return electronNu;
-  if (pd == G4AntiNeutrinoE::Definition()) return antiElectronNu;
-  if (pd == G4MuonMinus::Definition()) return muonMinus;
-  if (pd == G4MuonPlus::Definition()) return muonPlus;
-  if (pd == G4NeutrinoMu::Definition()) return muonNu;
-  if (pd == G4AntiNeutrinoMu::Definition()) return antiMuonNu;
-  if (pd == G4TauMinus::Definition()) return tauMinus;
-  if (pd == G4TauPlus::Definition()) return tauPlus;
-  if (pd == G4NeutrinoTau::Definition()) return tauNu;
-  if (pd == G4AntiNeutrinoTau::Definition()) return antiTauNu;
+  if (pd == Def<G4Electron>()) return electron;
+  if (pd == Def<G4Positron>()) return positron;
+  if (pd == Def<G4NeutrinoE>()) return electronNu;
+  if (pd == Def<G4AntiNeutrinoE>()) return antiElectronNu;
+  if (pd == Def<G4MuonMinus>()) return muonMinus;
+  if (pd == Def<G4MuonPlus>()) return muonPlus;
+  if (pd == Def<G4NeutrinoMu>()) return muonNu;
+  if (pd == Def<G4AntiNeutrinoMu>()) return antiMuonNu;
+  if (pd == Def<G4TauMinus>()) return tauMinus;
+  if (pd == Def<G4TauPlus>()) return tauPlus;
+  if (pd == Def<G4NeutrinoTau>()) return tauNu;
+  if (pd == Def<G4AntiNeutrinoTau>()) return antiTauNu;
 
   // Weak neutral kaons must be mixed back to strong (strangeness states)
-  if (pd == G4KaonZeroShort::Definition() || pd == G4KaonZeroLong::Definition())
+  if (pd == Def<G4KaonZeroShort>() || pd == Def<G4KaonZeroLong>())
   {
     return ((G4UniformRand() > 0.5) ? kaonZero : kaonZeroBar);
   }
