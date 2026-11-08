@@ -77,6 +77,7 @@
 #include "G4CascadeChannelTables.hh"
 #include "G4CascadeCheckBalance.hh"
 #include "G4CascadeDeexcitation.hh"
+#include "G4CascadeParameters.hh"
 #include "G4CollisionOutput.hh"
 #include "G4ElementaryParticleCollider.hh"
 #include "G4IntraNucleiCascader.hh"
@@ -266,7 +267,7 @@ void G4InuclCollider::collide(G4InuclParticle* bullet, G4InuclParticle* target,
     output.removeRecoilFragment();
 
     //*** TEMPORARY, USE ENVVAR TO ENABLE/DISABLE THIS TEST ***
-    if (std::getenv("G4CASCADE_CHECK_PHOTONUCLEAR"))
+    if (G4CascadeParameters::checkPhotonuclear())
       if (!photonuclearOkay(output)) continue;
 
     if (verboseLevel > 2) G4cout << " itry " << itry << " finished, moving to lab frame" << G4endl;

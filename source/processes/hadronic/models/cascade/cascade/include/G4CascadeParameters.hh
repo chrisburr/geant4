@@ -53,6 +53,7 @@ class G4CascadeParameters
     // Top-level configuration flags
     static G4int verbose() { return Instance()->VERBOSE_LEVEL; }
     static G4bool checkConservation() { return Instance()->CHECK_ECONS; }
+    static G4bool checkPhotonuclear() { return Instance()->CHECK_PHOTONUCLEAR; }
     static G4bool usePreCompound() { return Instance()->USE_PRECOMPOUND; }
     static G4bool useAbla() { return Instance()->USE_ABLA; }
     static G4bool doCoalescence() { return Instance()->DO_COALESCENCE; }
@@ -83,6 +84,7 @@ class G4CascadeParameters
 
     const char* G4CASCADE_VERBOSE;
     const char* G4CASCADE_CHECK_ECONS;
+    const char* G4CASCADE_CHECK_PHOTONUCLEAR;
     const char* G4CASCADE_USE_PRECOMPOUND;
     const char* G4CASCADE_USE_ABLA;
     const char* G4CASCADE_DO_COALESCENCE;
@@ -108,6 +110,7 @@ class G4CascadeParameters
 
     G4int VERBOSE_LEVEL;  // Top-level configuration flags
     G4bool CHECK_ECONS;
+    G4bool CHECK_PHOTONUCLEAR;
     G4bool USE_PRECOMPOUND;
     G4bool USE_ABLA;
     G4bool DO_COALESCENCE;
