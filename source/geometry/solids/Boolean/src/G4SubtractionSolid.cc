@@ -45,11 +45,78 @@
 #include "HepPolyhedronProcessor.h"
 
 #include <sstream>
+#include <typeinfo>
 
 namespace
 {
 G4RecursiveMutex subMutex = G4MUTEX_INITIALIZER;
+
+// A subtraction of many solids, (((A - B1) - B2) ... - Bn), is a left-deep
+// chain of G4SubtractionSolid, as built by geometry converters for a
+// subtraction with many subtracted solids. In such a chain, the recursive
+// DistanceToIn(p) and DistanceToOut(p) evaluate Inside() of the whole
+// sub-chain at every level, i.e. O(n^2) calls to Inside() of the
+// constituents. The functions below evaluate a chain in one pass instead,
+// with identical results.
+
+// True if 'solid' is a G4SubtractionSolid (and not a derived class).
+// Comparing the addresses of the type_info objects avoids a string
+// comparison; a false negative would only mean that the chain is not
+// followed further, with the same result.
+inline G4bool IsSubtractionSolid(const G4VSolid* solid)
+{
+  return &typeid(*solid) == &typeid(G4SubtractionSolid);
 }
+
+// Returns Inside(p) of 's', computed as G4SubtractionSolid::Inside() does
+// for each level of the chain. Also returns the first operand at the bottom
+// of the chain in 'base', and in 'selected' the subtracted solid of the
+// topmost level of the chain for which p is not outside either operand
+// (unchanged if there is no such level).
+EInside ChainInside(const G4VSolid* s, const G4ThreeVector& p, const G4VSolid*& base,
+                    const G4VSolid*& selected)
+{
+  if (!IsSubtractionSolid(s))
+  {
+    base = s;
+    return s->Inside(p);
+  }
+  EInside positionA = ChainInside(s->GetConstituentSolid(0), p, base, selected);
+  if (positionA == kOutside)
+  {
+    return positionA;
+  }
+  const G4VSolid* solidB = s->GetConstituentSolid(1);
+  EInside positionB = solidB->Inside(p);
+  if (positionB == kOutside)
+  {
+    return positionA;
+  }
+  selected = solidB;
+  if (positionB == kInside)
+  {
+    return kOutside;
+  }
+  if (positionA == kInside)
+  {
+    return kSurface;
+  }
+  return s->Inside(p);  // point on both surfaces
+}
+
+// Returns DistanceToOut(p) of 's' for p not outside 's'. As p not outside
+// S(k) = S(k-1) - Bk implies p not outside S(k-1), the Inside() check of
+// each nested DistanceToOut(p) always passes and is skipped
+G4double ChainDistanceToOut(const G4VSolid* s, const G4ThreeVector& p)
+{
+  if (!IsSubtractionSolid(s))
+  {
+    return s->DistanceToOut(p);
+  }
+  return std::min(ChainDistanceToOut(s->GetConstituentSolid(0), p),
+                  s->GetConstituentSolid(1)->DistanceToIn(p));
+}
+}  // namespace
 
 //////////////////////////////////////////////////////////////////////////
 //
@@ -402,6 +469,22 @@ G4double G4SubtractionSolid::DistanceToIn(const G4ThreeVector& p) const
   }
 #endif
 
+  if (IsSubtractionSolid(fPtrSolidA))
+  {
+    // Chain of subtractions: the recursion below returns Bk->DistanceToOut(p)
+    // for the topmost level k with p not outside S(k-1) and Bk, and otherwise
+    // DistanceToIn(p) of the first operand at the bottom of the chain
+    //
+    const G4VSolid* base = nullptr;
+    const G4VSolid* selected = nullptr;
+    if ((ChainInside(fPtrSolidA, p, base, selected) != kOutside) &&  // case 1
+        (fPtrSolidB->Inside(p) != kOutside))
+    {
+      return fPtrSolidB->DistanceToOut(p);
+    }
+    return (selected != nullptr) ? selected->DistanceToOut(p) : base->DistanceToIn(p);
+  }
+
   if ((fPtrSolidA->Inside(p) != kOutside) &&  // case 1
       (fPtrSolidB->Inside(p) != kOutside))
   {
@@ -487,7 +570,7 @@ G4double G4SubtractionSolid::DistanceToOut(const G4ThreeVector& p) const
   }
   else
   {
-    dist = std::min(fPtrSolidA->DistanceToOut(p), fPtrSolidB->DistanceToIn(p));
+    dist = std::min(ChainDistanceToOut(fPtrSolidA, p), fPtrSolidB->DistanceToIn(p));
   }
   return dist;
 }
