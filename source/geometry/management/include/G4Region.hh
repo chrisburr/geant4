@@ -312,6 +312,12 @@ class G4Region
      */
     inline void AddMaterial(G4Material* aMaterial);
 
+    /**
+     * Scan step of ScanVolumeTree() for the logical volume 'lv' alone:
+     * places its materials in the list and sets its region.
+     */
+    void ScanVolume(G4LogicalVolume* lv, G4bool region);
+
   private:
 
     using G4RootLVList = std::vector<G4LogicalVolume*>;

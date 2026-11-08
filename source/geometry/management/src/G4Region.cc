@@ -38,6 +38,8 @@
 #include "G4VPhysicalVolume.hh"
 #include "G4VUserRegionInformation.hh"
 
+#include <unordered_set>
+
 // These macros changes the references to fields that are now encapsulated
 // in the class G4RegionData.
 //
@@ -156,6 +158,41 @@ G4UserSteppingAction* G4Region::GetRegionalSteppingAction() const
   return G4MT_rsaction;
 }
 
+namespace
+{
+// Collects in 'lvs' the logical volumes of the tree of 'lv', in the
+// depth-first pre-order of the recursion of G4Region::ScanVolumeTree().
+// The result of G4Region::ScanVolume() depends only on the logical
+// volume, not on the placement path through which it is reached, so each
+// logical volume (and its sub-tree) is collected only once.
+void CollectVolumeTree(G4LogicalVolume* lv, std::vector<G4LogicalVolume*>& lvs,
+                       std::unordered_set<G4LogicalVolume*>& scanned)
+{
+  if (!scanned.insert(lv).second)
+  {
+    return;
+  }
+  lvs.push_back(lv);
+  std::size_t noDaughters = lv->GetNoDaughters();
+  if (noDaughters > 0 && lv->GetDaughter(0)->IsParameterised())
+  {
+    CollectVolumeTree(lv->GetDaughter(0)->GetLogicalVolume(), lvs, scanned);
+    return;
+  }
+  for (std::size_t i = 0; i < noDaughters; ++i)
+  {
+    G4LogicalVolume* daughterLVol = lv->GetDaughter(i)->GetLogicalVolume();
+    if (!daughterLVol->IsRootRegion())
+    {
+      // Set daughter's LV to be a region and store materials in
+      // the materials list, if the LV is not already a root region
+      //
+      CollectVolumeTree(daughterLVol, lvs, scanned);
+    }
+  }
+}
+}  // namespace
+
 // *******************************************************************
 // ScanVolumeTree:
 //  - Scans recursively the 'lv' logical volume tree, retrieves
@@ -163,9 +200,28 @@ G4UserSteppingAction* G4Region::GetRegionalSteppingAction() const
 //  - The boolean flag 'region' identifies if the volume tree must
 //    have region reset (false) or if the current region must be
 //    associated to the logical volume 'lv' and its tree (true).
+//  - Each logical volume of the tree is scanned once, however many
+//    times it is placed.
 // *******************************************************************
 //
 void G4Region::ScanVolumeTree(G4LogicalVolume* lv, G4bool region)
+{
+  std::vector<G4LogicalVolume*> lvs;
+  std::unordered_set<G4LogicalVolume*> scanned;
+  CollectVolumeTree(lv, lvs, scanned);
+  for (auto vol : lvs)
+  {
+    ScanVolume(vol, region);
+  }
+}
+
+// *******************************************************************
+// ScanVolume:
+//  - Scan step of ScanVolumeTree() for the logical volume 'lv' alone,
+//    without its daughters.
+// *******************************************************************
+//
+void G4Region::ScanVolume(G4LogicalVolume* lv, G4bool region)
 {
   // If logical volume is going to become a region, add
   // its material to the list if not already present
@@ -202,7 +258,7 @@ void G4Region::ScanVolumeTree(G4LogicalVolume* lv, G4bool region)
   //
   lv->SetRegion(currentRegion);
 
-  // Stop recursion here if no further daughters are involved
+  // Stop here if no parameterised daughter is involved
   //
   if (noDaughters == 0)
   {
@@ -269,22 +325,6 @@ void G4Region::ScanVolumeTree(G4LogicalVolume* lv, G4bool region)
             AddMaterial(baseMat);
           }
         }
-      }
-    }
-    G4LogicalVolume* daughterLVol = daughterPVol->GetLogicalVolume();
-    ScanVolumeTree(daughterLVol, region);
-  }
-  else
-  {
-    for (std::size_t i = 0; i < noDaughters; ++i)
-    {
-      G4LogicalVolume* daughterLVol = lv->GetDaughter(i)->GetLogicalVolume();
-      if (!daughterLVol->IsRootRegion())
-      {
-        // Set daughter's LV to be a region and store materials in
-        // the materials list, if the LV is not already a root region
-        //
-        ScanVolumeTree(daughterLVol, region);
       }
     }
   }
@@ -432,6 +472,35 @@ void G4Region::SetWorld(G4VPhysicalVolume* wp)
   return;
 }
 
+namespace
+{
+// Recursive part of G4Region::BelongsTo(). A logical volume reached
+// again through another placement path has already been searched without
+// success, so each logical volume (and its sub-tree) is searched once.
+G4bool BelongsToTree(const G4Region* region, G4LogicalVolume* currLog,
+                     std::unordered_set<G4LogicalVolume*>& scanned)
+{
+  if (currLog->GetRegion() == region)
+  {
+    return true;
+  }
+  if (!scanned.insert(currLog).second)
+  {
+    return false;
+  }
+
+  std::size_t nDaughters = currLog->GetNoDaughters();
+  while ((nDaughters--) != 0)  // Loop checking, 06.08.2015, G.Cosmo
+  {
+    if (BelongsToTree(region, currLog->GetDaughter(nDaughters)->GetLogicalVolume(), scanned))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+}  // namespace
+
 // *******************************************************************
 // BelongsTo:
 //  - Returns whether this region belongs to the given physical volume
@@ -440,22 +509,8 @@ void G4Region::SetWorld(G4VPhysicalVolume* wp)
 //
 G4bool G4Region::BelongsTo(G4VPhysicalVolume* thePhys) const
 {
-  G4LogicalVolume* currLog = thePhys->GetLogicalVolume();
-  if (currLog->GetRegion() == this)
-  {
-    return true;
-  }
-
-  std::size_t nDaughters = currLog->GetNoDaughters();
-  while ((nDaughters--) != 0)  // Loop checking, 06.08.2015, G.Cosmo
-  {
-    if (BelongsTo(currLog->GetDaughter(nDaughters)))
-    {
-      return true;
-    }
-  }
-
-  return false;
+  std::unordered_set<G4LogicalVolume*> scanned;
+  return BelongsToTree(this, thePhys->GetLogicalVolume(), scanned);
 }
 
 // *******************************************************************
