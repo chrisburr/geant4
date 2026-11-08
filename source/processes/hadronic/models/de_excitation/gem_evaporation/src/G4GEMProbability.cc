@@ -81,9 +81,12 @@ G4double G4GEMProbability::EmissionProbability(const G4Fragment& fragment,
     G4double InitialLevelDensity = ComputeInitialLevelDensity(fragment);
     G4double Ux, UxSqrt, UxLog;
     PrecomputeResidualQuantities(fragment, Ux, UxSqrt, UxLog);
+    FragmentQuantities q;
+    PrecomputeFragmentQuantities(fragment, MaximalKineticEnergy, CoulombBarrier, Ux, UxSqrt, UxLog,
+                                 q);
 
-    probability = CalcProbability(fragment, MaximalKineticEnergy, CoulombBarrier, Spin,
-                                  InitialLevelDensity, Ux, UxSqrt, UxLog);
+    probability =
+      CalcProbability(MaximalKineticEnergy, CoulombBarrier, Spin, InitialLevelDensity, q);
 
     // Next there is a loop over excited states for this channel
     // summing probabilities
@@ -96,8 +99,8 @@ G4double G4GEMProbability::EmissionProbability(const G4Fragment& fragment,
         G4double Tmax = MaximalKineticEnergy - ExcitEnergies[i];
         if (Tmax > 0.0)
         {
-          G4double width = CalcProbability(fragment, Tmax, CoulombBarrier, ExcitSpins[i],
-                                           InitialLevelDensity, Ux, UxSqrt, UxLog);
+          G4double width =
+            CalcProbability(Tmax, CoulombBarrier, ExcitSpins[i], InitialLevelDensity, q);
           // JMQ April 2010 added condition to prevent reported crash
           //  update probability
           if (width > 0. && fPlanck < width * ExcitLifetimes[i])
@@ -167,12 +170,14 @@ void G4GEMProbability::PrecomputeResidualQuantities(const G4Fragment& fragment, 
   UxLog = G4Log(Ux / MeV);
 }
 
-G4double G4GEMProbability::CalcProbability(const G4Fragment& fragment,
-                                           G4double MaximalKineticEnergy, G4double V, G4double spin,
-                                           G4double InitialLevelDensity, G4double Ux,
-                                           G4double UxSqrt, G4double UxLog) const
+void G4GEMProbability::PrecomputeFragmentQuantities(const G4Fragment& fragment,
+                                                    G4double MaximalKineticEnergy, G4double V,
+                                                    G4double Ux, G4double UxSqrt, G4double UxLog,
+                                                    FragmentQuantities& q) const
 
-// Calculate integrated probability (width) for evaporation channel
+// Quantities of CalcProbability() that do not depend on the kinetic energy
+// and spin of the emitted fragment, computed once per fragment instead of
+// once per excited level of the emitted fragment
 {
   G4int A = fragment.GetA_asInt();
   G4int Z = fragment.GetZ_asInt();
@@ -180,16 +185,18 @@ G4double G4GEMProbability::CalcProbability(const G4Fragment& fragment,
   G4int ResidualA = A - theA;
   G4int ResidualZ = Z - theZ;
 
-  G4double NuclearMass = fragment.ComputeGroundStateMass(theZ, theA);
+  q.NuclearMass = fragment.ComputeGroundStateMass(theZ, theA);
 
-  G4double Alpha = CalcAlphaParam(fragment);
-  G4double Beta = CalcBetaParam(fragment);
+  q.Alpha = CalcAlphaParam(fragment);
+  q.Beta = CalcBetaParam(fragment);
 
   //                       ***RESIDUAL***
   // JMQ (September 2009) the following quantities refer to the RESIDUAL:
 
   G4double delta0 = fNucData->GetPairingCorrection(ResidualZ, ResidualA);
 
+  // the level density parameter does not depend on the excitation energy
+  // (it is evaluated here for the transition to the ground state)
   G4double a =
     theEvapLDPptr->LevelDensityParameter(ResidualA, ResidualZ, MaximalKineticEnergy + V - delta0);
   G4double aSqrt = std::sqrt(a);
@@ -199,13 +206,55 @@ G4double G4GEMProbability::CalcProbability(const G4Fragment& fragment,
   G4double E0 =
     Ex - T * (G4Log(T / MeV) - G4Log(a * MeV) / 4.0 - 1.25 * UxLog + 2.0 * aSqrt * UxSqrt);
   //                      ***end RESIDUAL ***
+  q.delta0 = delta0;
+  q.a = a;
+  q.Ex = Ex;
+  q.T = T;
+  q.E0 = E0;
+
+  // JMQ 190709 fix on Rb and  geometrical cross sections according to
+  //            Furihata's paper (JAERI-Data/Code 2001-105, p6)
+  G4double Rb = 0.0;
+  if (theA > 4)
+  {
+    G4double Ad = fG4pow->Z13(ResidualA);
+    G4double Aj = fG4pow->Z13(theA);
+    Rb = 1.12 * (Aj + Ad) - 0.86 * ((Aj + Ad) / (Aj * Ad)) + 2.85;
+    Rb *= fermi;
+  }
+  else if (theA > 1)
+  {
+    G4double Ad = fG4pow->Z13(ResidualA);
+    G4double Aj = fG4pow->Z13(theA);
+    Rb = 1.5 * (Aj + Ad) * fermi;
+  }
+  else
+  {
+    G4double Ad = fG4pow->Z13(ResidualA);
+    Rb = 1.5 * Ad * fermi;
+  }
+  q.GeometricalXS = pi * Rb * Rb;
+  // end of JMQ fix on Rb by 190709
+}
+
+G4double G4GEMProbability::CalcProbability(G4double MaximalKineticEnergy, G4double V, G4double spin,
+                                           G4double InitialLevelDensity,
+                                           const FragmentQuantities& q) const
+
+// Calculate integrated probability (width) for evaporation channel
+{
+  const G4double T = q.T;
+  const G4double Ex = q.Ex;
+  const G4double E0 = q.E0;
+  const G4double a = q.a;
+  const G4double delta0 = q.delta0;
 
   G4double Width;
   G4double t = MaximalKineticEnergy / T;
   if (MaximalKineticEnergy < Ex)
   {
     // JMQ 190709 bug in I1 fixed (T was  missing)
-    Width = (I1(t, t) * T + (Beta + V) * I0(t)) / G4Exp(E0 / T);
+    Width = (I1(t, t) * T + (q.Beta + V) * I0(t)) / G4Exp(E0 / T);
   }
   else
   {
@@ -233,35 +282,11 @@ G4double G4GEMProbability::CalcProbability(const G4Fragment& fragment,
   // JMQ 14/07/2009 BIG BUG : NuclearMass is in MeV => hbarc instead of
   //                          hbar_planck must be used
   //     G4double g = (2.0*spin+1.0)*NuclearMass/(pi2* hbar_Planck*hbar_Planck);
-  G4double gg = (2.0 * spin + 1.0) * NuclearMass / (pi2 * hbarc * hbarc);
-
-  // JMQ 190709 fix on Rb and  geometrical cross sections according to
-  //            Furihata's paper (JAERI-Data/Code 2001-105, p6)
-  G4double Rb = 0.0;
-  if (theA > 4)
-  {
-    G4double Ad = fG4pow->Z13(ResidualA);
-    G4double Aj = fG4pow->Z13(theA);
-    Rb = 1.12 * (Aj + Ad) - 0.86 * ((Aj + Ad) / (Aj * Ad)) + 2.85;
-    Rb *= fermi;
-  }
-  else if (theA > 1)
-  {
-    G4double Ad = fG4pow->Z13(ResidualA);
-    G4double Aj = fG4pow->Z13(theA);
-    Rb = 1.5 * (Aj + Ad) * fermi;
-  }
-  else
-  {
-    G4double Ad = fG4pow->Z13(ResidualA);
-    Rb = 1.5 * Ad * fermi;
-  }
-  G4double GeometricalXS = pi * Rb * Rb;
-  // end of JMQ fix on Rb by 190709
+  G4double gg = (2.0 * spin + 1.0) * q.NuclearMass / (pi2 * hbarc * hbarc);
 
   // JMQ 190709 BUG : pi instead of sqrt(pi) must be here according
   //  to Furihata's report:
-  Width *= pi * gg * GeometricalXS * Alpha / (12.0 * InitialLevelDensity);
+  Width *= pi * gg * q.GeometricalXS * q.Alpha / (12.0 * InitialLevelDensity);
 
   return Width;
 }

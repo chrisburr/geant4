@@ -80,9 +80,18 @@ class G4GEMProbability : public G4VEmissionProbability
     void PrecomputeResidualQuantities(const G4Fragment& fragment, G4double& Ux, G4double& UxSqrt,
                                       G4double& UxLog) const;
 
-    G4double CalcProbability(const G4Fragment& fragment, G4double MaximalKineticEnergy, G4double V,
-                             G4double spin, G4double InitialLevelDensity, G4double Ux,
-                             G4double UxSqrt, G4double UxLog) const;
+    // Quantities of CalcProbability() that depend only on the fragment
+    struct FragmentQuantities
+    {
+        G4double NuclearMass, Alpha, Beta, delta0, a, Ex, T, E0, GeometricalXS;
+    };
+
+    void PrecomputeFragmentQuantities(const G4Fragment& fragment, G4double MaximalKineticEnergy,
+                                      G4double V, G4double Ux, G4double UxSqrt, G4double UxLog,
+                                      FragmentQuantities& q) const;
+
+    G4double CalcProbability(G4double MaximalKineticEnergy, G4double V, G4double spin,
+                             G4double InitialLevelDensity, const FragmentQuantities& q) const;
 
     inline G4double CCoeficient(G4int) const;
 
