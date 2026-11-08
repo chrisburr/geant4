@@ -52,6 +52,7 @@
 
 #include <fstream>
 #include <iomanip>
+#include <unordered_set>
 
 G4ProductionCutsTable* G4ProductionCutsTable::fProductionCutsTable = nullptr;
 
@@ -412,9 +413,19 @@ G4double G4ProductionCutsTable::GetHighEdgeEnergy() const
 }
 
 // --------------------------------------------------------------------
-void G4ProductionCutsTable::ScanAndSetCouple(G4LogicalVolume* aLV, G4MaterialCutsCouple* aCouple,
-                                             G4Region* aRegion)
+namespace
 {
+// Recursive part of G4ProductionCutsTable::ScanAndSetCouple().
+// The outcome for a logical volume depends only on the logical volume
+// itself, not on the path through which it is reached, so each logical
+// volume (and its sub-tree) is processed only once. Without this, a
+// logical volume placed many times (e.g. a detector cell in a module
+// itself placed many times) is visited once per placement path.
+void ScanAndSetCoupleOnce(G4LogicalVolume* aLV, G4MaterialCutsCouple* aCouple, G4Region* aRegion,
+                          std::unordered_set<G4LogicalVolume*>& scanned)
+{
+  if (!scanned.insert(aLV).second) return;  // already processed
+
   // Check whether or not this logical volume belongs to the same region
   if ((aRegion != nullptr) && aLV->GetRegion() != aRegion) return;
 
@@ -424,15 +435,21 @@ void G4ProductionCutsTable::ScanAndSetCouple(G4LogicalVolume* aLV, G4MaterialCut
     aLV->SetMaterialCutsCouple(aCouple);
   }
 
-  std::size_t noDaughters = aLV->GetNoDaughters();
-  if (noDaughters == 0) return;
-
   // Loop over daughters with same region
+  std::size_t noDaughters = aLV->GetNoDaughters();
   for (std::size_t i = 0; i < noDaughters; ++i)
   {
     G4LogicalVolume* daughterLVol = aLV->GetDaughter(i)->GetLogicalVolume();
-    ScanAndSetCouple(daughterLVol, aCouple, aRegion);
+    ScanAndSetCoupleOnce(daughterLVol, aCouple, aRegion, scanned);
   }
+}
+}  // namespace
+
+void G4ProductionCutsTable::ScanAndSetCouple(G4LogicalVolume* aLV, G4MaterialCutsCouple* aCouple,
+                                             G4Region* aRegion)
+{
+  std::unordered_set<G4LogicalVolume*> scanned;
+  ScanAndSetCoupleOnce(aLV, aCouple, aRegion, scanned);
 }
 
 // --------------------------------------------------------------------
